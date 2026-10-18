@@ -1,0 +1,51 @@
+name: Record demo
+
+# Re-records demo/reach-failover.gif against three real llama.cpp workers.
+# The GIF is pushed to the demo-recording branch to be reviewed and copied into main.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [demo/demo.tape, scripts/demo.sh]
+
+permissions:
+  contents: write
+
+jobs:
+  record:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start the model workers and orchestrator
+        run: docker compose up -d --build
+      - name: Wait for all three workers
+        run: |
+          for i in $(seq 1 120); do
+            [ "$(curl -s localhost:8080/v1/workers | jq '[.[] | select(.healthy)] | length')" = "3" ] && exit 0
+            sleep 5
+          done
+          exit 1
+      - name: Warm up each worker, then clear the counters
+        run: |
+          for i in 1 2 3 4 5 6; do
+            curl -s -o /dev/null localhost:8080/v1/chat/completions -H 'content-type: application/json' \
+              -d '{"max_tokens":4,"messages":[{"role":"user","content":"hi"}]}'
+          done
+          for w in worker-1 worker-2 worker-3; do curl -s -o /dev/null -X POST localhost:8080/v1/workers/$w/reset; done
+      - name: Record
+        uses: charmbracelet/vhs-action@v2
+        with:
+          path: demo/demo.tape
+      - name: Publish to the demo-recording branch
+        run: |
+          ls -la demo/reach-failover.gif
+          mkdir /tmp/out && cp demo/reach-failover.gif /tmp/out/
+          cd /tmp/out
+          git init -q -b demo-recording
+          git add reach-failover.gif
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -qm "Demo recording from ${GITHUB_SHA::8}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" demo-recording
+      - name: Logs
+        if: failure()
+        run: docker compose logs --tail 40
