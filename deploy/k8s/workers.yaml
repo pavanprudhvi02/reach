@@ -1,0 +1,75 @@
+# Headless service gives each worker pod a stable DNS name:
+# llama-worker-0.llama-workers.reach.svc.cluster.local
+apiVersion: v1
+kind: Service
+metadata:
+  name: llama-workers
+spec:
+  clusterIP: None
+  selector:
+    app: llama-worker
+  ports:
+    - name: http
+      port: 8080
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: llama-worker
+spec:
+  serviceName: llama-workers
+  replicas: 3
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: llama-worker
+  template:
+    metadata:
+      labels:
+        app: llama-worker
+    spec:
+      initContainers:
+        - name: fetch-model
+          image: curlimages/curl:8.11.1
+          command: ["sh", "-c", "test -s /models/model.gguf || curl -fL --retry 3 -o /models/model.gguf \"$MODEL_URL\""]
+          env:
+            - name: MODEL_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: reach-config
+                  key: MODEL_URL
+          volumeMounts:
+            - name: models
+              mountPath: /models
+      containers:
+        - name: llama
+          image: ghcr.io/ggml-org/llama.cpp:server
+          args: ["-m", "/models/model.gguf", "--host", "0.0.0.0", "--port", "8080", "-c", "2048", "-t", "2", "--parallel", "2"]
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 20
+          resources:
+            requests: { cpu: "1", memory: 1Gi }
+            limits: { memory: 2Gi }
+          volumeMounts:
+            - name: models
+              mountPath: /models
+              readOnly: true
+  volumeClaimTemplates:
+    - metadata:
+        name: models
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 2Gi
