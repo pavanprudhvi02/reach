@@ -35,20 +35,24 @@ public class ChatController {
         this.mapper = mapper;
     }
 
+    // Both paths return a StreamingResponseBody: Spring MVC only treats the body
+    // as a stream when the declared return type says so.
     @PostMapping(path = "/v1/chat/completions", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<?> chat(@RequestBody byte[] body) {
+    public ResponseEntity<StreamingResponseBody> chat(@RequestBody byte[] body) {
         JsonNode request = parse(body);
         boolean stream = request.path("stream").asBoolean(false);
         return stream ? streamed(body) : buffered(body);
     }
 
-    private ResponseEntity<byte[]> buffered(byte[] body) {
+    private ResponseEntity<StreamingResponseBody> buffered(byte[] body) {
         InferenceService.Completion c = inference.complete(body);
+        byte[] answer = c.reply().body();
         return ResponseEntity.status(c.reply().status())
                 .contentType(MediaType.parseMediaType(c.reply().contentType()))
+                .contentLength(answer.length)
                 .header(WORKER_HEADER, c.worker().id())
                 .header(ATTEMPTS_HEADER, String.valueOf(c.attempts()))
-                .body(c.reply().body());
+                .body(out -> out.write(answer));
     }
 
     /**

@@ -18,7 +18,7 @@ jobs:
         working-directory: orchestrator
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
@@ -29,6 +29,9 @@ jobs:
           mvn -B verify 2>&1 | tee build.log || {
             grep -E "\[ERROR\]" build.log | grep -v -E "^\[ERROR\] *$|Re-run Maven|For more information|Help 1|-> \[Help" \
               | head -20 | while IFS= read -r l; do echo "::error title=maven::$l"; done
+            # Assertion messages follow the FAILURE line in the surefire reports.
+            cat target/surefire-reports/*.txt 2>/dev/null | grep -A3 "<<< FAILURE\|<<< ERROR" | grep -v "^--$" \
+              | head -24 | while IFS= read -r l; do echo "::warning title=test detail::$l"; done
             exit 1
           }
       - name: Test report
