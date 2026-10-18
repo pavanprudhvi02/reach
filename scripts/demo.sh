@@ -11,27 +11,49 @@ pool() {
     | @tsv' | column -t
 }
 
-ask() {
-  curl -s -D /tmp/reach-headers -o /tmp/reach-body "$API/v1/chat/completions" \
-    -H 'content-type: application/json' \
-    -d "{\"messages\":[{\"role\":\"user\",\"content\":\"$1 Answer in a few words.\"}],\"max_tokens\":16}"
-  worker=$(grep -i '^x-reach-worker' /tmp/reach-headers | tr -d '\r' | cut -d' ' -f2)
-  attempts=$(grep -i '^x-reach-attempts' /tmp/reach-headers | tr -d '\r' | cut -d' ' -f2)
-  answer=$(jq -r '.choices[0].message.content // .error.message' /tmp/reach-body | tr '\n' ' ' | cut -c1-48)
-  printf '  %-16s -> %-9s attempts=%s  %s\n' "$1" "$worker" "$attempts" "$answer"
+# send N "question" [max_tokens]: starts a request in the background.
+send() {
+  local body
+  body=$(jq -nc --arg q "$2" --argjson n "${3:-16}" \
+    '{max_tokens: $n, ignore_eos: ($n > 16), messages: [{role: "user", content: $q}]}')
+  curl -s -D "/tmp/reach-h.$1" -o "/tmp/reach-b.$1" "$API/v1/chat/completions" \
+    -H 'content-type: application/json' -d "$body" &
 }
+
+# show N "question": prints which worker answered request N and how many attempts it took.
+show() {
+  local worker attempts answer
+  worker=$(grep -i '^x-reach-worker' "/tmp/reach-h.$1" | tr -d '\r' | cut -d' ' -f2)
+  attempts=$(grep -i '^x-reach-attempts' "/tmp/reach-h.$1" | tr -d '\r' | cut -d' ' -f2)
+  answer=$(jq -r '.choices[0].message.content // .error.message' "/tmp/reach-b.$1" | tr '\n' ' ' | cut -c1-44)
+  printf '  %-22s -> %-9s attempts=%s  %s\n' "$2" "$worker" "$attempts" "$answer"
+}
+
+ask() { send 0 "$1"; wait; show 0 "$1"; }
 
 echo "== Worker pool"
 pool
 
 echo
-echo "== Requests spread across the pool"
-for q in "Name a planet." "Name a colour." "Name a fruit."; do ask "$q"; done
+echo "== Three requests at once spread across the pool"
+qs=("Name a planet." "Name a colour." "Name a fruit.")
+for i in 0 1 2; do send "$i" "${qs[$i]}"; done
+wait
+for i in 0 1 2; do show "$i" "${qs[$i]}"; done
 
 echo
-echo "== Killing worker-1 (docker compose kill worker-1)"
+echo "== Three long answers in flight, then worker-1 is killed"
+qs=("Tell a story about a fox." "Tell a story about a ship." "Tell a story about a robot.")
+for i in 0 1 2; do send "$i" "${qs[$i]}" 400; done
+sleep 0.6
 docker compose kill worker-1 > /dev/null 2>&1
-for q in "Name an animal." "Name a city." "Name a metal." "Name a river."; do ask "$q"; done
+echo "  docker compose kill worker-1"
+wait
+for i in 0 1 2; do show "$i" "${qs[$i]}"; done
+
+echo
+echo "== New requests keep working"
+for q in "Name an animal." "Name a city."; do ask "$q"; done
 
 echo
 echo "== Pool after the crash"
