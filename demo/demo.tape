@@ -5,7 +5,7 @@ Output demo/reach-failover.gif
 Set Shell "bash"
 Set FontSize 15
 Set Width 1180
-Set Height 860
+Set Height 940
 Set Padding 18
 Set Theme "Catppuccin Mocha"
 Set TypingSpeed 45ms

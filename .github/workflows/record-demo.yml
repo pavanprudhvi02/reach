@@ -39,10 +39,19 @@ jobs:
           # One annotation holding the whole output (GitHub keeps only 10 per step).
           echo "::notice title=dry run::$(grep -v '^$' dry-run.txt | head -60 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')"
           exit ${status:-0}
+      - name: Install VHS
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q ffmpeg ttyd fonts-jetbrains-mono
+          curl -sSL -o vhs.deb https://github.com/charmbracelet/vhs/releases/download/v0.10.0/vhs_0.10.0_amd64.deb
+          sudo dpkg -i vhs.deb
       - name: Record
-        uses: charmbracelet/vhs-action@v2
-        with:
-          path: demo/demo.tape
+        run: |
+          set -o pipefail
+          vhs demo/demo.tape 2>&1 | tee vhs.log || {
+            echo "::error title=vhs::$(tail -20 vhs.log | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')"
+            exit 1
+          }
       - name: Publish to the demo-recording branch
         run: |
           ls -la demo/reach-failover.gif

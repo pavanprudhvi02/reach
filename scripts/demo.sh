@@ -26,9 +26,9 @@ show() {
   worker=$(grep -i '^x-reach-worker' "/tmp/reach-h.$1" | tr -d '\r' | cut -d' ' -f2 || true)
   attempts=$(grep -i '^x-reach-attempts' "/tmp/reach-h.$1" | tr -d '\r' | cut -d' ' -f2 || true)
   answer=$(jq -r '.choices[0].message.content // .error.message // "?"' "/tmp/reach-b.$1" 2> /dev/null \
-    | tr '\n' ' ' | cut -c1-44 || true)
+    | tr '\n' ' ' | cut -c1-46 || true)
   [ -n "$worker" ] || worker="HTTP $(head -1 "/tmp/reach-h.$1" | cut -d' ' -f2 | tr -d '\r')"
-  printf '  %-22s -> %-9s attempts=%s  %s\n' "$2" "$worker" "$attempts" "$answer"
+  printf '  %-20s -> %-9s attempts=%s  %s\n' "$2" "$worker" "$attempts" "$answer"
 }
 
 ask() { send 0 "$1"; wait; show 0 "$1"; }
@@ -45,7 +45,7 @@ for i in 0 1 2; do show "$i" "${qs[$i]}"; done
 
 echo
 echo "== Three long answers in flight, then worker-1 is killed"
-qs=("Tell a story about a fox." "Tell a story about a ship." "Tell a story about a robot.")
+qs=("Story about a fox." "Story about a ship." "Story about a robot.")
 for i in 0 1 2; do send "$i" "${qs[$i]}" 400; done
 sleep 0.6
 docker compose kill worker-1 > /dev/null 2>&1
