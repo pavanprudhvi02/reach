@@ -1,0 +1,65 @@
+name: reach
+
+# Three CPU-only llama.cpp workers serving the same small GGUF model, and the
+# Spring Boot orchestrator in front of them on http://localhost:8080.
+#
+#   docker compose up -d --build
+#   curl localhost:8080/v1/workers
+
+x-worker: &worker
+  image: ghcr.io/ggml-org/llama.cpp:server
+  # Small threads count per worker so three fit on an ordinary laptop.
+  command: ["-m", "/models/model.gguf", "--host", "0.0.0.0", "--port", "8080", "-c", "2048", "-t", "2", "--parallel", "2"]
+  volumes:
+    - models:/models:ro
+  depends_on:
+    model:
+      condition: service_completed_successfully
+  restart: unless-stopped
+
+services:
+  # Downloads the model once into a shared volume.
+  model:
+    image: curlimages/curl:8.11.1
+    user: root
+    environment:
+      MODEL_URL: ${MODEL_URL:-https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        if [ -s /models/model.gguf ]; then echo "model already present"; exit 0; fi
+        echo "downloading $$MODEL_URL"
+        curl -fL --retry 3 -o /models/model.gguf.part "$$MODEL_URL"
+        mv /models/model.gguf.part /models/model.gguf
+    volumes:
+      - models:/models
+
+  worker-1:
+    <<: *worker
+  worker-2:
+    <<: *worker
+  worker-3:
+    <<: *worker
+
+  orchestrator:
+    build: ./orchestrator
+    ports:
+      - "8080:8080"
+    environment:
+      REACH_WORKERS_0_ID: worker-1
+      REACH_WORKERS_0_URL: http://worker-1:8080
+      REACH_WORKERS_1_ID: worker-2
+      REACH_WORKERS_1_URL: http://worker-2:8080
+      REACH_WORKERS_2_ID: worker-3
+      REACH_WORKERS_2_URL: http://worker-3:8080
+      REACH_REQUEST_TIMEOUT: 120s
+      REACH_MAX_IN_FLIGHT_PER_WORKER: 2
+    depends_on:
+      - worker-1
+      - worker-2
+      - worker-3
+    restart: unless-stopped
+
+volumes:
+  models:
