@@ -23,9 +23,11 @@ send() {
 # show N "question": prints which worker answered request N and how many attempts it took.
 show() {
   local worker attempts answer
-  worker=$(grep -i '^x-reach-worker' "/tmp/reach-h.$1" | tr -d '\r' | cut -d' ' -f2)
-  attempts=$(grep -i '^x-reach-attempts' "/tmp/reach-h.$1" | tr -d '\r' | cut -d' ' -f2)
-  answer=$(jq -r '.choices[0].message.content // .error.message' "/tmp/reach-b.$1" | tr '\n' ' ' | cut -c1-44)
+  worker=$(grep -i '^x-reach-worker' "/tmp/reach-h.$1" | tr -d '\r' | cut -d' ' -f2 || true)
+  attempts=$(grep -i '^x-reach-attempts' "/tmp/reach-h.$1" | tr -d '\r' | cut -d' ' -f2 || true)
+  answer=$(jq -r '.choices[0].message.content // .error.message // "?"' "/tmp/reach-b.$1" 2> /dev/null \
+    | tr '\n' ' ' | cut -c1-44 || true)
+  [ -n "$worker" ] || worker="HTTP $(head -1 "/tmp/reach-h.$1" | cut -d' ' -f2 | tr -d '\r')"
   printf '  %-22s -> %-9s attempts=%s  %s\n' "$2" "$worker" "$attempts" "$answer"
 }
 

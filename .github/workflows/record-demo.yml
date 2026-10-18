@@ -32,6 +32,12 @@ jobs:
               -d '{"max_tokens":4,"messages":[{"role":"user","content":"hi"}]}'
           done
           for w in worker-1 worker-2 worker-3; do curl -s -o /dev/null -X POST localhost:8080/v1/workers/$w/reset; done
+      - name: Dry run of the demo script
+        run: |
+          set -o pipefail
+          scripts/demo.sh 2>&1 | tee dry-run.txt || status=$?
+          while IFS= read -r l; do echo "::notice title=dry run::$l"; done < <(grep -v '^$' dry-run.txt | head -45)
+          exit ${status:-0}
       - name: Record
         uses: charmbracelet/vhs-action@v2
         with:
