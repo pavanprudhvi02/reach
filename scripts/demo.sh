@@ -15,7 +15,7 @@ pool() {
 send() {
   local body
   body=$(jq -nc --arg q "$2" --argjson n "${3:-16}" \
-    '{max_tokens: $n, ignore_eos: ($n > 16), messages: [{role: "user", content: $q}]}')
+    '{max_tokens: $n, ignore_eos: ($n > 16), messages: [{role: "user", content: (if $n > 16 then $q else $q + " Answer in a few words." end)}]}')
   curl -s -D "/tmp/reach-h.$1" -o "/tmp/reach-b.$1" "$API/v1/chat/completions" \
     -H 'content-type: application/json' -d "$body" &
 }

@@ -36,7 +36,8 @@ jobs:
         run: |
           set -o pipefail
           scripts/demo.sh 2>&1 | tee dry-run.txt || status=$?
-          while IFS= read -r l; do echo "::notice title=dry run::$l"; done < <(grep -v '^$' dry-run.txt | head -45)
+          # One annotation holding the whole output (GitHub keeps only 10 per step).
+          echo "::notice title=dry run::$(grep -v '^$' dry-run.txt | head -60 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')"
           exit ${status:-0}
       - name: Record
         uses: charmbracelet/vhs-action@v2
