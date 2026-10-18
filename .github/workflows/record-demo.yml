@@ -25,13 +25,12 @@ jobs:
             sleep 5
           done
           exit 1
-      - name: Warm up each worker, then clear the counters
+      - name: Warm up each worker
         run: |
           for i in 1 2 3 4 5 6; do
             curl -s -o /dev/null localhost:8080/v1/chat/completions -H 'content-type: application/json' \
               -d '{"max_tokens":4,"messages":[{"role":"user","content":"hi"}]}'
           done
-          for w in worker-1 worker-2 worker-3; do curl -s -o /dev/null -X POST localhost:8080/v1/workers/$w/reset; done
       - name: Dry run of the demo script
         run: |
           set -o pipefail
@@ -39,6 +38,10 @@ jobs:
           # One annotation holding the whole output (GitHub keeps only 10 per step).
           echo "::notice title=dry run::$(grep -v '^$' dry-run.txt | head -60 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')"
           exit ${status:-0}
+      - name: Clear the counters left by the dry run
+        run: |
+          for w in worker-1 worker-2 worker-3; do curl -s -o /dev/null -X POST localhost:8080/v1/workers/$w/reset; done
+          curl -s localhost:8080/v1/workers | jq -c '.[] | [.id, .healthy, .served]'
       - name: Install VHS
         run: |
           sudo apt-get update -q

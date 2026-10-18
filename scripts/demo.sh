@@ -66,7 +66,7 @@ echo
 echo "== Streaming, token by token"
 printf '  '
 curl -sN "$API/v1/chat/completions" -H 'content-type: application/json' \
-  -d '{"stream":true,"max_tokens":40,"messages":[{"role":"user","content":"Count from one to ten in words."}]}' |
+  -d '{"stream":true,"max_tokens":40,"messages":[{"role":"user","content":"Write the numbers one to ten as words, separated by commas, nothing else."}]}' |
   while IFS= read -r line; do
     case "$line" in
       "data: [DONE]"*) break ;;
